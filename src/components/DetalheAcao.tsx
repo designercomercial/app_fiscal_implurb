@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Ban, ClipboardList, Info, Map as IconeMapa, Megaphone, Navigation, Play, Route, WifiOff } from "lucide-react";
+import { Ban, ClipboardList, Info, Map as IconeMapa, Megaphone, Navigation, Play, Route, ScrollText, WifiOff } from "lucide-react";
 import {
   ROTULO_MOTIVO,
   ROTULO_ORIGEM,
@@ -117,7 +117,19 @@ function ConteudoDetalhe({ acao, hoje, mensagem, erro }: { acao: Acao; hoje: str
         <Campo rotulo="Origem">{ROTULO_ORIGEM[acao.origem]}</Campo>
         {acao.nome_proprietario ? <Campo rotulo="Proprietário">{acao.nome_proprietario}</Campo> : null}
         {acao.numero_processo ? <Campo rotulo="Processo" mono>{acao.numero_processo}</Campo> : null}
-        {acao.numero_alvara ? <Campo rotulo="Alvará" mono>{acao.numero_alvara}</Campo> : null}
+        {acao.numero_alvara ? (
+          <Campo rotulo="Alvará">
+            <span className="font-mono">{acao.numero_alvara}</span>
+            <a
+              href={`/fiscal/consultar-licenca?licenca=${encodeURIComponent(acao.numero_alvara)}`}
+              data-testid="link-consultar-licenca"
+              className="mt-1 flex min-h-11 items-center gap-1.5 font-medium text-brand-fg underline underline-offset-2"
+            >
+              <ScrollText aria-hidden className="size-5 shrink-0" strokeWidth={2} />
+              Consultar licença
+            </a>
+          </Campo>
+        ) : null}
         <Campo rotulo="Formulário no app">{CANAL_POR_TIPO[acao.tipo].nome}</Campo>
         <Campo rotulo="Ordem na rota">{acao.ordem_rota}ª parada</Campo>
         <Campo rotulo="Atualizado em">{dataHoraManaus(acao.atualizado_em)}</Campo>

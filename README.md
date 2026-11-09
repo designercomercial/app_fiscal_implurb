@@ -1,6 +1,11 @@
-# Libera Fácil: Ações do dia
+# Libera Fácil: páginas do App do Fiscal
 
-Página que o canal URL **"Ações do Dia"** do App do Fiscal (SASI) abre em webview. Mostra ao fiscal logado as ações de fiscalização do dia, em ordem de prioridade. Nela o fiscal registra "Estou a caminho", "Iniciar vistoria" e "Não consegui realizar".
+Páginas que os canais URL do App do Fiscal (SASI) abrem em webview:
+
+| Canal | Página | O que faz |
+|---|---|---|
+| Ações do Dia | `/fiscal/acoes-do-dia` | Ações de fiscalização do dia do fiscal logado, em ordem de prioridade. Nela o fiscal registra "Estou a caminho", "Iniciar vistoria" e "Não consegui realizar". |
+| Consultar Licença de Obra | `/fiscal/consultar-licenca` | Busca por alvará, processo ou endereço. Mostra a situação da licença e o que foi aprovado. |
 
 Stack: Next.js 15 (App Router), TypeScript, Tailwind CSS 4 sobre os tokens do SASI Design System, Lucide, Vitest com Testing Library e Playwright.
 
@@ -59,6 +64,39 @@ Os dois endpoints `/api/dev/*` ficam desligados em produção.
 
 Regras ([src/domain/status.ts](src/domain/status.ts)): pendente → em_deslocamento → em_execucao. Os três status em aberto podem ir para nao_realizada, com motivo. em_execucao → concluida **só** pela integração (`concluirPorFormulario`). Toda mudança grava a trilha de auditoria: de, para, motivo, usuário, origem, data e hora.
 
+## Consultar licença de obra
+
+Um campo só, que reconhece o formato do que foi digitado ([src/domain/licenca.ts](src/domain/licenca.ts)):
+
+| O fiscal digita | O sistema busca por |
+|---|---|
+| Começa com `ALV` | Número do alvará (aceita parte do número) |
+| `AAAA.NNN.NNNN`, com ou sem pontos | Número do processo |
+| Qualquer outro texto, a partir de 3 caracteres | Endereço ou bairro, sem diferenciar acentos (todas as palavras precisam aparecer) |
+
+- **Número exato:** abre direto o detalhe. O detalhe também abre por `?licenca=ALV-…`, usado pelo link "Consultar licença" no detalhe de uma ação que tem alvará.
+- **Situação:** é calculada a partir do status do cadastro e da validade:
+  - Válida;
+  - Vence em breve (30 dias ou menos);
+  - Vencida;
+  - Suspensa;
+  - Cancelada;
+  - Em análise.
+
+  Cada situação aparece sempre com ícone e texto.
+- **Proteção de dados (LGPD):** o CPF/CNPJ do proprietário sai do servidor mascarado (`***.456.789-**`) e não pode ser usado como termo de busca.
+- **Auditoria:** cada busca e cada detalhe aberto registram quem consultou, o quê e quando.
+- **Sem internet:** as últimas 15 licenças consultadas ficam no aparelho. Sem rede, a busca procura nelas e o detalhe avisa o horário dos dados.
+
+API:
+- `GET /api/fiscal/licencas?q=termo`:
+  - 200 com no máximo 20 resultados e `truncado` quando há mais;
+  - 400 para busca curta;
+  - 401 sem fiscal autenticado.
+- `GET /api/fiscal/licencas/{alvará ou processo}`: 200, 404 ou 401.
+
+Repositório (mock em memória): `LicencasRepositorio`, em [src/server/licencas-service.ts](src/server/licencas-service.ts). Dados mock: [src/server/licencas-mock.ts](src/server/licencas-mock.ts) tem 10 licenças. Vários alvarás coincidem com as ações mock.
+
 ## Decisões de implementação
 - **Isolamento:** o filtro por fiscal é feito no serviço do back-end ([src/server/acoes-service.ts](src/server/acoes-service.ts)). A página nunca recebe `fiscal_id`.
 - **Sem internet:**
@@ -84,3 +122,7 @@ Regras ([src/domain/status.ts](src/domain/status.ts)): pendente → em_deslocame
 7. **Mudança de status sem internet:** hoje é bloqueada. Falta decidir se deve virar uma fila offline com envio posterior.
 8. **Tema:** se o App do Fiscal vai informar o tema (claro ou escuro) pela URL.
 9. **Fonte Circular Std** (display SASI): os arquivos não estão no repositório. O título usa a fonte de fallback do token (Geist).
+10. **Licenças, fonte dos dados:** qual sistema guarda o cadastro de alvarás e qual é o formato oficial do número (o mock usa `ALV-AAAA-NNNNN`).
+11. **Licenças, prazo de alerta:** "vence em breve" usa 30 dias. Falta confirmar com a chefia.
+12. **Licenças, QR Code da placa da obra:** não está nesta versão. Se a placa tiver QR, a busca pode abrir a câmera.
+13. **Licenças, regra de visibilidade:** hoje qualquer fiscal autenticado consulta qualquer licença. Falta confirmar se deve haver restrição por zona.

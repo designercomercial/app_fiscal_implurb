@@ -24,7 +24,7 @@ export class ErroApi extends Error {
 }
 
 /** Parâmetros de desenvolvimento repassados à API (ex.: ?fiscal=f-002 no mock). */
-function parametrosRepassados(): URLSearchParams {
+export function parametrosRepassados(): URLSearchParams {
   const p = new URLSearchParams();
   if (typeof window === "undefined") return p;
   const atual = new URLSearchParams(window.location.search);
@@ -33,7 +33,7 @@ function parametrosRepassados(): URLSearchParams {
   return p;
 }
 
-async function requisitar<T>(url: string, init: RequestInit = {}): Promise<T> {
+export async function requisitar<T>(url: string, init: RequestInit = {}): Promise<T> {
   const controle = new AbortController();
   const timer = setTimeout(() => controle.abort(), TIMEOUT_MS);
   let resposta: Response;

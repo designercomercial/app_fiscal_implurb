@@ -26,7 +26,7 @@ import { situacaoPrazoDaAcao } from "@/domain/prazo";
 
 const ICONE = "size-4 shrink-0";
 
-function Selo({ classes, icone, children, testId }: { classes: string; icone: ReactNode; children: ReactNode; testId?: string }) {
+export function Selo({ classes, icone, children, testId }: { classes: string; icone: ReactNode; children: ReactNode; testId?: string }) {
   return (
     <span
       data-testid={testId}
