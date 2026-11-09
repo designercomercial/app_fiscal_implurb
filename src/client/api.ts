@@ -17,19 +17,23 @@ export class ErroApi extends Error {
     public readonly codigo: string,
     mensagem: string,
     public readonly acaoAtual?: Acao,
+    /** Corpo completo da resposta de erro (ex.: desafio de captcha). */
+    public readonly corpo?: unknown,
   ) {
     super(mensagem);
     this.name = "ErroApi";
   }
 }
 
-/** Parâmetros de desenvolvimento repassados à API (ex.: ?fiscal=f-002 no mock). */
+/** Parâmetros de desenvolvimento repassados à API (ex.: ?fiscal=f-002 ou ?cidadao=c-002 no mock). */
 export function parametrosRepassados(): URLSearchParams {
   const p = new URLSearchParams();
   if (typeof window === "undefined") return p;
   const atual = new URLSearchParams(window.location.search);
-  const fiscal = atual.get("fiscal");
-  if (fiscal) p.set("fiscal", fiscal);
+  for (const nome of ["fiscal", "cidadao"]) {
+    const valor = atual.get(nome);
+    if (valor) p.set(nome, valor);
+  }
   return p;
 }
 
@@ -65,6 +69,7 @@ export async function requisitar<T>(url: string, init: RequestInit = {}): Promis
       c.erro?.codigo ?? "ERRO",
       c.erro?.mensagem ?? "Não foi possível concluir. Tente novamente.",
       c.acao,
+      corpo,
     );
   }
   return corpo as T;

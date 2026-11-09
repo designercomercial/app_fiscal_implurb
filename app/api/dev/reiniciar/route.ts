@@ -1,5 +1,7 @@
 import { reiniciarRepositorioMock } from "@/server/acoes-repo";
 import { json } from "@/server/http";
+import { reiniciarLimites } from "@/server/limite-consultas";
+import { reiniciarProcessosMock } from "@/server/processos-service";
 
 export const dynamic = "force-dynamic";
 
@@ -9,5 +11,7 @@ export async function POST() {
     return json({ erro: { codigo: "NAO_DISPONIVEL", mensagem: "Indisponível." } }, 404);
   }
   reiniciarRepositorioMock();
+  reiniciarProcessosMock();
+  reiniciarLimites();
   return json({ ok: true });
 }

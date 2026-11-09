@@ -1,11 +1,14 @@
-# Libera Fácil: páginas do App do Fiscal
+# Libera Fácil: páginas do App do Fiscal e do App do Cidadão
 
-Páginas que os canais URL do App do Fiscal (SASI) abrem em webview:
+Páginas que os canais URL dos apps do SASI abrem em webview:
 
-| Canal | Página | O que faz |
-|---|---|---|
-| Ações do Dia | `/fiscal/acoes-do-dia` | Ações de fiscalização do dia do fiscal logado, em ordem de prioridade. Nela o fiscal registra "Estou a caminho", "Iniciar vistoria" e "Não consegui realizar". |
-| Consultar Licença de Obra | `/fiscal/consultar-licenca` | Busca por alvará, processo ou endereço. Mostra a situação da licença e o que foi aprovado. |
+| App | Canal | Página | O que faz |
+|---|---|---|---|
+| Fiscal | Ações do Dia | `/fiscal/acoes-do-dia` | Ações de fiscalização do dia do fiscal logado, em ordem de prioridade. Nela o fiscal registra "Estou a caminho", "Iniciar vistoria" e "Não consegui realizar". |
+| Fiscal | Consultar Licença de Obra | `/fiscal/consultar-licenca` | Busca por alvará, processo ou endereço. Mostra a situação da licença e o que foi aprovado. |
+| Cidadão | Acompanhar Meus Processos (com login) | `/cidadao/meus-processos` | Processos em que a pessoa é participante. O detalhe fica em `/cidadao/meus-processos/{protocolo}`. |
+| Cidadão | Consultar por Protocolo (pública) | `/consultar` | Dados mínimos do processo, sem dados pessoais. Aceita `?protocolo=`. |
+| Cidadão | Validar Alvará (pública) | `/validar` | Confere um documento pelo código ou pelo QR Code. O QR aponta para `/validar?codigo=XXXX`. |
 
 Stack: Next.js 15 (App Router), TypeScript, Tailwind CSS 4 sobre os tokens do SASI Design System, Lucide, Vitest com Testing Library e Playwright.
 
@@ -25,6 +28,12 @@ npm run dev            # http://localhost:3000/fiscal/acoes-do-dia
 
 ### Parâmetros úteis na URL (somente mock)
 - `?fiscal=f-002`: entra como outra fiscal (Ana Ribeiro), para ver o isolamento.
+- `?cidadao=`: escolhe o cidadão no Meus Processos. Sem o parâmetro, entra como `c-001`.
+  - `c-001`: Maria, proprietária dos 5 processos de exemplo;
+  - `c-002`: José, despachante;
+  - `c-003`: Ana Paula, responsável técnica;
+  - `c-004`: Raimundo, dono dos documentos vencido, cancelado e suspenso;
+  - `c-005`: Lúcia, sem processos.
 - `?tema=dark` ou `?tema=light`: força o tema. Sem o parâmetro, a página segue o aparelho.
 
 ### Simular o recebimento do formulário (desenvolvimento)
@@ -97,6 +106,56 @@ API:
 
 Repositório (mock em memória): `LicencasRepositorio`, em [src/server/licencas-service.ts](src/server/licencas-service.ts). Dados mock: [src/server/licencas-mock.ts](src/server/licencas-mock.ts) tem 10 licenças. Vários alvarás coincidem com as ações mock.
 
+## Meus Processos (App do Cidadão)
+
+O cidadão vê o mesmo status que o servidor vê. O objetivo é tirar o espaço de quem inventa pendências e cobra para "liberar" processos.
+
+### Regras
+- **Acesso (no back-end, em [src/server/processos-service.ts](src/server/processos-service.ts)):**
+  - o cidadão vê os processos em que é proprietário, responsável técnico ou despachante;
+  - o proprietário sempre vê o processo, mesmo quando outra pessoa deu entrada;
+  - processo de outra pessoa responde 404, igual a protocolo inexistente.
+- **Com quem está:** é calculado a partir do status, em [src/domain/processo.ts](src/domain/processo.ts).
+  - Pendência e aguardando pagamento: "Aguardando você".
+  - Demais etapas: "Com o IMPLURB há X dias", contados desde a última mudança de status.
+  - Processo concluído (documento emitido, não aprovado ou arquivado): sem indicador.
+- **Linha do tempo:**
+  - etapas concluídas vêm do histórico, com data;
+  - as próximas seguem o fluxo previsto do tipo de pedido; o Habite-se tem vistoria;
+  - depois de uma pendência, a etapa interrompida volta a aparecer nas próximas.
+- **Um botão principal por tela:** "Responder pendência", "Ver guias" ou "Baixar PDF", conforme o momento do processo.
+- **Consulta pública:** a resposta é montada campo a campo:
+  - tipo, bairro, status e data;
+  - pendência aberta (sim ou não);
+  - guia em aberto (sim ou não).
+
+  Um teste confere que nenhum nome, CPF/CNPJ, endereço ou valor sai na resposta.
+- **Validação:** devolve `valido`, `vencido`, `cancelado_ou_suspenso` ou `nao_encontrado`. Cancelado ou suspenso não traz nenhum dado do documento.
+- **Proteção contra abuso** ([src/server/limite-consultas.ts](src/server/limite-consultas.ts)), por IP:
+  - consulta: depois de 5 consultas em 10 minutos, pede captcha; acertar libera mais 5. Teto de 30 por hora;
+  - validação: só o teto de 60 por hora, porque o código é longo e aleatório.
+
+### API
+| Rota | Resposta |
+|---|---|
+| `GET /api/cidadao/processos` | 200 `{ cidadao, processos }` ou 401 |
+| `GET /api/cidadao/processos/{protocolo}` | 200 `{ processo }`, 401 ou 404 (não participante) |
+| `GET /api/cidadao/documentos/{numero}/pdf` | PDF (só participantes), 401 ou 404 |
+| `GET /api/publico/consulta/{protocolo}` | 200 `{ consulta }`, 400, 404 ou 429. O 429 traz `CAPTCHA_OBRIGATORIO` com o desafio, ou `LIMITE_EXCEDIDO` com `Retry-After`. |
+| `GET /api/publico/validar/{codigo}` | 200 `{ resultado, ... }` ou 429 |
+
+O captcha resolvido vai no cabeçalho `x-captcha-token`.
+
+### Onde trocar
+| O quê | Arquivo | Como |
+|---|---|---|
+| **Login do cidadão** (mock) | [src/server/auth-cidadao.ts](src/server/auth-cidadao.ts) | Troque `autenticarMock` por validação do token do SASI, sessão do Libera Fácil ou gov.br. O resto usa só `getCidadaoAtual(request)`. |
+| **Links dos canais** (Responder Pendência, Emitir Guia de Taxas, Denunciar Cobrança Indevida) | [src/domain/canais-cidadao.ts](src/domain/canais-cidadao.ts) | Defina `NEXT_PUBLIC_SASI_CIDADAO_LINK_TEMPLATE` (aceita `{canal_id}`, `{canal}` e `{protocolo}`). Sem template, a página copia o protocolo e diz onde colar. |
+| **Domínio** impresso no documento e no QR Code | `NEXT_PUBLIC_LIBERA_FACIL_URL` | Ex.: `https://liberafacil.exemplo.gov.br`. Sem a variável, usa o endereço do servidor. |
+| **Captcha** (mock: soma simples) | [src/server/captcha.ts](src/server/captcha.ts) e [src/components/cidadao/DesafioCaptcha.tsx](src/components/cidadao/DesafioCaptcha.tsx) | Implemente `VerificadorCaptcha` com Turnstile, hCaptcha ou reCAPTCHA e troque o componente pelo widget do serviço. |
+| **PDF do documento** (demonstração) | [app/api/cidadao/documentos/[numero]/pdf/route.ts](app/api/cidadao/documentos/[numero]/pdf/route.ts) | Devolva o PDF oficial do Libera Fácil. |
+| **Banco de dados** | `ProcessosRepositorio` em [src/server/processos-service.ts](src/server/processos-service.ts) | Hoje é mock em memória ([src/server/processos-mock.ts](src/server/processos-mock.ts)). |
+
 ## Decisões de implementação
 - **Isolamento:** o filtro por fiscal é feito no serviço do back-end ([src/server/acoes-service.ts](src/server/acoes-service.ts)). A página nunca recebe `fiscal_id`.
 - **Sem internet:**
@@ -126,3 +185,15 @@ Repositório (mock em memória): `LicencasRepositorio`, em [src/server/licencas-
 11. **Licenças, prazo de alerta:** "vence em breve" usa 30 dias. Falta confirmar com a chefia.
 12. **Licenças, QR Code da placa da obra:** não está nesta versão. Se a placa tiver QR, a busca pode abrir a câmera.
 13. **Licenças, regra de visibilidade:** hoje qualquer fiscal autenticado consulta qualquer licença. Falta confirmar se deve haver restrição por zona.
+
+### Meus Processos
+14. **Login do cidadão:** token do SASI, sessão do Libera Fácil ou gov.br. Também falta definir como a conta se liga aos processos (CPF/CNPJ validado?).
+15. **Links dos canais** Responder Pendência, Emitir Guia de Taxas e Denunciar Cobrança Indevida (formato e ids). Falta também onde ficam os dois últimos no app.
+16. **Domínio** do Libera Fácil para o QR Code dos documentos.
+17. **Leitura de QR Code:** só aparece se o webview liberar a câmera e tiver o leitor nativo do navegador. Confirmar com a SASI.
+18. **Captcha:** qual serviço usar.
+19. **Limites de consulta:** os números atuais são uma proposta. Atenção: as operadoras móveis compartilham IP (CGNAT), então o limite por IP pode atingir pessoas diferentes. Com vários servidores, o contador precisa de armazenamento compartilhado (ex.: Redis).
+20. **Ordem das etapas:** a linha do tempo assume triagem → análise → aprovação → pagamento → (vistoria no Habite-se) → aprovado → emitido. Confirmar o fluxo real de cada tipo e o prazo de cada etapa.
+21. **"Aprovado" (deferido)** conta como em andamento, porque o documento ainda não foi emitido.
+22. **Download do PDF dentro do webview:** confirmar se o app do SASI permite baixar arquivos ou se o PDF deve abrir no navegador.
+23. **Validação de Habite-se e licença de publicidade:** a página "Validar alvará" aceita também esses documentos. Confirmar se o nome do canal deve mudar.

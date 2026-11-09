@@ -7,3 +7,5 @@ test-results/
 playwright-report/
 .env*.local
 .next-e2e/
+
+.vercel
